@@ -212,24 +212,35 @@ exports.getEvaluatorById = async (req, res) => {
 exports.getActiveEvaluators = async (req, res) => {
   try {
     const { search } = req.query;
-
-    const query = { approved: true };
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { qualification: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    const evaluators = await Evaluator.find(query)
-      .sort({ createdAt: -1 })
+console.log(search)
+    // First get approved evaluator user IDs
+    const evaluators = await User.find({
+      role: 'evaluator',
+      isApproved: true,
+    })
+      .populate({
+        path: 'evaluatorId',
+        match: search
+          ? {
+              $or: [
+                { name: { $regex: search, $options: 'i' } },
+                { qualification: { $regex: search, $options: 'i' } },
+              ],
+            }
+          : {},
+      })
+      .select('evaluatorId')
       .lean();
-
-    return res.json(successResponse({ evaluators }));
+    
+    // Flatten and remove nulls
+    const filteredEvaluators = evaluators
+      .map(user => user.evaluatorId)
+      .filter(Boolean);
+    
+    return res.json(successResponse({ evaluators: filteredEvaluators }));
+    
   } catch (error) {
     console.error("Get active evaluators error:", error);
     return res.status(500).json(errorResponse("Failed to fetch active evaluators"));
   }
 };
-

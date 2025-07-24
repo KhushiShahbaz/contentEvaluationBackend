@@ -7,7 +7,7 @@ const evaluatorSchema = new mongoose.Schema({
   experience: { type: String, required: true },
   phone: { type: String, required: true },
   email: { type: String, required: true },
-  approved: { type: Boolean, default: false }, // Admin approval
+
 }, { timestamps: true });
 
 module.exports = mongoose.model("Evaluator", evaluatorSchema);

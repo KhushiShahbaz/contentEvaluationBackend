@@ -76,7 +76,7 @@ exports.register = async (req, res) => {
       email,
       password,
       role,
-      isApproved: false, // Default: waiting for admin approval
+      isApproved: false,
     });
 
     const evaluator = await Evaluator.create({

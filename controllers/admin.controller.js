@@ -49,7 +49,7 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getPendingEvaluators = async (req, res) => {
   try {
-    const evaluators = await Evaluator.find({ approved: false });
+    const evaluators = await User.find({ isApproved: false });
 
     res.status(200).json({
       success: true,

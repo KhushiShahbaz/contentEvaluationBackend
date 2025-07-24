@@ -7,7 +7,7 @@ const path = require("path")
 
 // Import routes
 const authRoutes = require("./routes/auth.routes")
-// const userRoutes = require("./routes/user.routes")
+const userRoutes = require("./routes/user.routes")
 const teamRoutes = require("./routes/team.routes")
 const evaluatorRoutes = require("./routes/evaluator.routes")
 const adminRoutes = require("./routes/admin.routes")
@@ -40,7 +40,7 @@ mongoose
 
 // Routes
 app.use("/api/auth", authRoutes)
-// app.use("/api/users", userRoutes)
+app.use("/api/users", userRoutes)
 app.use("/api/teams", teamRoutes)
 app.use("/api/evaluators", evaluatorRoutes)
 app.use("/api/admin", adminRoutes)
@@ -58,7 +58,7 @@ if (process.env.NODE_ENV === "production") {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack)
+  console.error("Full Error Stack:", err.stack); // Log the full error
   res.status(500).json({
     success: false,
     message: "Server error",

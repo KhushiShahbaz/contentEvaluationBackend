@@ -11,19 +11,22 @@ const {
 } = require("../controllers/submission.controller")
 const { protect, authorize } = require("../middleware/auth.middleware")
 
-router
-  .route("/")
-  .get(protect, authorize("admin", "evaluator"), getSubmissions)
-  .post(protect, authorize("team"), createSubmission)
+// Specific routes first
+router.route("/team/:teamId").get(protect, authorize("admin", "team", "evaluator"), getTeamSubmissions)
 
+router.route("/:id/evaluators/:evaluatorId").post(protect, authorize("admin"), assignEvaluator)
+
+// Then generic :id route
 router
   .route("/:id")
   .get(protect, getSubmission)
   .put(protect, authorize("team", "admin"), updateSubmission)
   .delete(protect, authorize("admin", "team"), deleteSubmission)
 
-router.route("/team/:teamId").get(protect, authorize("admin", "team", "evaluator"), getTeamSubmissions)
-
-router.route("/:id/evaluators/:evaluatorId").post(protect, authorize("admin"), assignEvaluator)
+// Finally, base route
+router
+  .route("/")
+  .get(protect, authorize("admin", "evaluator"), getSubmissions)
+  .post(protect, authorize("team"), createSubmission)
 
 module.exports = router

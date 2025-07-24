@@ -12,12 +12,17 @@ import { verifyAuth, verifyAdminAuth } from "../middleware/auth.middleware.js"
 
 const router = express.Router()
 
-router.get("/", verifyAdminAuth, getAllTickets)
-router.post("/", verifyAuth, createTicket)
+// Specific routes first
 router.get("/user", verifyAuth, getUserTickets)
 router.get("/stats", verifyAdminAuth, getSupportStats)
+router.post("/:id/message", verifyAuth, sendMessage)
+
+// Then generic :id-based routes
 router.get("/:id", verifyAuth, getTicketById)
 router.put("/:id", verifyAdminAuth, updateTicket)
-router.post("/:id/message", verifyAuth, sendMessage)
+
+// Finally base routes
+router.get("/", verifyAdminAuth, getAllTickets)
+router.post("/", verifyAuth, createTicket)
 
 export default router

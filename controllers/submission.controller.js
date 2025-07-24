@@ -227,16 +227,16 @@ exports.createSubmission = async (req, res) => {
 
   exports.getSubmission = async (req, res) => {
     try {
-      const submission = await Submission.findById(req.params.id)
-        .populate('teamId', 'name')
-        .populate({
-          path: 'evaluations',
-          populate: {
-            path: 'evaluatorId',
-            select: 'name email'
-          }
-        });
-  
+      const submission = await Submission.findOne({teamId:req.params.id})
+      .populate({
+        path: "teamId",
+        select: "name teamCode members",
+      }).populate({
+        path: "teamMembers",
+        select: "name email",
+      })
+      
+      
       if (!submission) {
         return res.status(404).json({
           success: false,

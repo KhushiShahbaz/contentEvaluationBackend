@@ -9,7 +9,7 @@ router
   .post(protect, authorize("admin"), inviteEvaluator)
   
 router
-  .route("/active/")
+  .route("/active")
   .get(protect, authorize("admin"), getActiveEvaluators)
 
 router

@@ -11,16 +11,23 @@ const {
 } = require("../controllers/team.controller")
 const { protect, authorize } = require("../middleware/auth.middleware")
 
+// List all teams
 router.route("/").get(protect, getTeams)
 
+// Specific nested member routes first
+router
+  .route("/:id/members")
+  .post(protect, authorize("admin", "team"), addTeamMember)
+
+router
+  .route("/:id/members/:userId")
+  .delete(protect, authorize("admin", "team"), removeTeamMember)
+
+// Then generic :id routes
 router
   .route("/:id")
   .get(protect, getTeam)
   .put(protect, authorize("admin", "team"), updateTeam)
   .delete(protect, authorize("admin"), deleteTeam)
-
-router.route("/:id/members").post(protect, authorize("admin", "team"), addTeamMember)
-
-router.route("/:id/members/:userId").delete(protect, authorize("admin", "team"), removeTeamMember)
 
 module.exports = router
