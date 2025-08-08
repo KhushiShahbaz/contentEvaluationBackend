@@ -227,7 +227,7 @@ exports.createSubmission = async (req, res) => {
 
   exports.getSubmission = async (req, res) => {
     try {
-      const submission = await Submission.findOne({teamId:req.params.id})
+      const submission = await Submission.findById(req.params.id)
       .populate({
         path: "teamId",
         select: "name teamCode members",
