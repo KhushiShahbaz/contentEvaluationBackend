@@ -138,11 +138,11 @@ exports.createSubmission = async (req, res) => {
           message: 'Submission not found'
         });
       }
-      
+      console.log(req.params)
       // Find evaluator
-      const evaluator = await Evaluator.findById(req.params.evaluatorId);
+      const evaluator = await Evaluator.findById(req.params?.evaluatorId);
       
-      if (!evaluator || evaluator.role !== 'evaluator') {
+      if (!evaluator ) {
         return res.status(404).json({
           success: false,
           message: 'Evaluator not found'
@@ -179,7 +179,7 @@ exports.createSubmission = async (req, res) => {
           practicality: 5,
           videoQuality: 5
         },
-        feedback: ''
+        // feedback: ''
       });
       
       // Update submission with evaluation
@@ -202,14 +202,22 @@ exports.createSubmission = async (req, res) => {
   exports.getSubmissions = async (req, res) => {
     try {
       const submissions = await Submission.find()
-        .populate('teamId', 'name members')
-        .populate({
+      .populate({
+          path: 'teamId',
+          select: 'name members',  // Include 'members' in the selected fields
+          populate: {
+              path: 'members',     // Then populate the 'members' array
+              select: 'name email' // (Optional) Select specific fields from members
+          }
+      })
+      .populate({
           path: 'evaluations',
           populate: {
-            path: 'evaluatorId',
-            select: 'name email'
+              path: 'evaluatorId',
+              select: 'name email'
           }
-        });
+      })
+      .lean(); // Optional: Convert to plain JavaScript objects
   
       res.status(200).json({
         success: true,
@@ -229,12 +237,21 @@ exports.createSubmission = async (req, res) => {
     try {
       const submission = await Submission.findById(req.params.id)
       .populate({
-        path: "teamId",
-        select: "name teamCode members",
-      }).populate({
-        path: "teamMembers",
-        select: "name email",
-      })
+        path: 'teamId',
+        select: 'name members',  // Include 'members' in the selected fields
+        populate: {
+            path: 'members',     // Then populate the 'members' array
+            select: 'name email' // (Optional) Select specific fields from members
+        }
+    })
+    .populate({
+        path: 'evaluations',
+        populate: {
+            path: 'evaluatorId',
+            select: 'name email'
+        }
+    })
+    .lean();
       
       
       if (!submission) {

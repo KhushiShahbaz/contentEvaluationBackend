@@ -31,12 +31,6 @@ const SubmissionSchema = new mongoose.Schema(
         "Please provide a valid YouTube or Vimeo link",
       ],
     },
-    teamMembers: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
     status: {
       type: String,
       enum: ["pending", "approved", "rejected", "evaluated"],

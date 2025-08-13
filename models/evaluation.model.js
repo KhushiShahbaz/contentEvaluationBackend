@@ -9,7 +9,7 @@ const EvaluationSchema = new mongoose.Schema(
     },
     evaluatorId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Evaluator",
       required: true,
     },
     scores: {
@@ -84,7 +84,7 @@ const EvaluationSchema = new mongoose.Schema(
     },
     feedback: {
       type: String,
-      required: [true, "Please provide feedback"],
+      // required: [ "Please provide feedback"],
       maxlength: [2000, "Feedback cannot be more than 2000 characters"],
     },
     status: {
