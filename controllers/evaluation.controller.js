@@ -189,8 +189,15 @@ exports.getEvaluatorAssignments = async (req, res) => {
   exports.getEvaluations = async (req, res) => {
     try {
       const evaluations = await Evaluation.find()
-        .populate('submissionId', 'projectTitle')
-        .populate('evaluatorId', 'name email');
+      .populate({
+        path: 'submissionId',
+        populate: {
+          path: 'teamId',
+          populate: {
+            path: 'leaderId'
+          }
+        }
+      })        .populate('evaluatorId');
   
       res.status(200).json({
         success: true,
