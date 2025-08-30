@@ -150,6 +150,15 @@ exports.getTeams = async (req, res) => {
         });
       }
       
+      // Enforce team size: max 5 total (leader + up to 4 members)
+      const currentMemberCount = team.members.length + 1; // +1 for leader
+      if (currentMemberCount >= 5) {
+        return res.status(400).json({
+          success: false,
+          message: 'Team already has maximum 5 members (including leader)'
+        });
+      }
+
       // Add member to team
       team.members.push(userId);
       await team.save();

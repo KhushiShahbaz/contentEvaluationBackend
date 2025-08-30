@@ -4,6 +4,7 @@ const Team = require("../models/team.model");
 const Submission = require("../models/submission.model");
 const Evaluation = require("../models/evaluation.model");
 const Evaluator = require("../models/evaluator.model");
+const Setting = require("../models/settings.model");
 
 /**
  * @desc    Get dashboard stats
@@ -237,7 +238,7 @@ exports.getLeaderboard = async (req, res) => {
    */
   exports.publishLeaderboard = async (req, res) => {
     try {
-      const { isPublished, showTeamNames, showProjectTitles, showDetailedScores, limitToTop } = req.body;
+      const { isPublished, showTeamNames, showProjectTitles, showDetailedScores, limitToTop } = req.body || {};
       
       // Update leaderboard settings
       await Setting.findOneAndUpdate(

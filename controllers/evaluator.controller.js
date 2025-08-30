@@ -152,46 +152,41 @@ exports.inviteEvaluator = async (req, res) => {
  */
 exports.getEvaluatorById = async (req, res) => {
   try {
-    // const authResult = await verifyAdminAuth(req)
-    // if (authResult.error) return res.status(401).json(authResult)
-
     const { id } = req.params
 
+    // Load evaluator doc
     const evaluator = await Evaluator.findById(id)
     if (!evaluator) return res.status(404).json(errorResponse("Evaluator not found"))
 
-    if (evaluator.role !== "evaluator")
-      return res.status(400).json(errorResponse("User is not an evaluator"))
+    // Verify there is a user linked to this evaluator
+    const user = await User.findOne({ evaluatorId: id, role: "evaluator" }).select("-password")
+    if (!user) return res.status(400).json(errorResponse("User is not an evaluator"))
 
-    const assignedEvaluations = await Submission.countDocuments({
-      "assignedEvaluators.evaluator": id,
-    })
-
+    // Stats based on Evaluation documents
+    const assignedEvaluations = await Evaluation.countDocuments({ evaluatorId: id })
     const completedEvaluations = await Evaluation.countDocuments({
-      evaluator: id,
-      status: "submitted",
+      evaluatorId: id,
+      status: { $in: ["submitted", "published"] },
     })
 
     const recentEvaluations = await Evaluation.find({
-      evaluator: id,
-      status: "submitted",
+      evaluatorId: id,
+      status: { $in: ["submitted", "published"] },
     })
-      .populate("submission", "teamName projectTitle")
-      .sort({ submittedDate: -1 })
+      .populate({ path: "submissionId", select: "projectTitle teamId", populate: { path: "teamId", select: "name" } })
+      .sort({ updatedAt: -1 })
       .limit(5)
       .lean()
 
     return res.json(
       successResponse({
         evaluator: {
-          ...evaluator,
+          ...evaluator.toObject(),
+          user,
           stats: {
             assignedEvaluations,
             completedEvaluations,
-            completionRate:
-              assignedEvaluations > 0
-                ? (completedEvaluations / assignedEvaluations) * 100
-                : 0,
+            completionRate: assignedEvaluations > 0 ? (completedEvaluations / assignedEvaluations) * 100 : 0,
           },
           recentEvaluations,
         },

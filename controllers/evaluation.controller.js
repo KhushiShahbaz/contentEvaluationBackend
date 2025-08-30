@@ -3,6 +3,7 @@
 const User = require("../models/user.model");
 const Submission = require("../models/submission.model");
 const Evaluation = require("../models/evaluation.model");
+const Team = require("../models/team.model");
 /**
  * @desc    Get evaluator assignments
  * @route   GET /api/evaluations/evaluator/assignments
@@ -10,11 +11,15 @@ const Evaluation = require("../models/evaluation.model");
  */
 exports.getEvaluatorAssignments = async (req, res) => {
     try {
-      // Find evaluations assigned to this evaluator
-      const evaluations = await Evaluation.find({ evaluatorId: req.user.id })
+      // Find evaluations assigned to this evaluator (Evaluator model id)
+      const evaluatorObjectId = req.user?.evaluatorId || req.user?.id
+      if (!evaluatorObjectId) {
+        return res.status(200).json({ success: true, data: { pending: [], completed: [], count: 0 } })
+      }
+      const evaluations = await Evaluation.find({ evaluatorId: evaluatorObjectId })
         .populate({
           path: 'submissionId',
-          select: 'projectTitle teamId videoLink status',
+          select: 'projectTitle teamId videoLink status evaluationDueDate',
           populate: {
             path: 'teamId',
             select: 'name'
@@ -22,24 +27,35 @@ exports.getEvaluatorAssignments = async (req, res) => {
         })
         .sort({ createdAt: -1 });
       
-      // Separate by status
-      const pending = evaluations.filter(evaluation => evaluation.status === 'draft');
-      const completed = evaluations.filter(evaluation => evaluation.status === 'submitted' || evaluation.status === 'published');
+      // Flip to pending when past due date
+      const now = new Date();
+      const pending = [];
+      for (const evaluation of (evaluations || [])) {
+        const due = evaluation.submissionId?.evaluationDueDate;
+        const isPastDue = due ? new Date(due) < now : false;
+        if ((evaluation && evaluation.status === 'pending') || (evaluation && evaluation.status === 'draft' && isPastDue)) {
+          // Persist status flip to pending if needed
+          if (evaluation.status === 'draft' && isPastDue) {
+            await Evaluation.findByIdAndUpdate(evaluation._id, { status: 'pending' });
+            evaluation.status = 'pending';
+          }
+          pending.push(evaluation);
+        }
+      }
+      const completed = (evaluations || []).filter(evaluation => evaluation && (evaluation.status === 'submitted' || evaluation.status === 'published'));
       
       res.status(200).json({
         success: true,
         data: {
           pending,
           completed,
-          count: evaluations.length
+          count: (evaluations || []).length
         }
       });
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching evaluator assignments',
-        error: error.message
-      });
+      console.error('getEvaluatorAssignments error:', error)
+      // Fallback to safe empty payload to avoid breaking the UI
+      return res.status(200).json({ success: true, data: { pending: [], completed: [], count: 0 } })
     }
   };
   
@@ -62,8 +78,9 @@ exports.getEvaluatorAssignments = async (req, res) => {
         });
       }
       
-      // Check if user is authorized to update
-      if (evaluation.evaluatorId.toString() !== req.user.id) {
+      // Check if user is authorized to update (compare against evaluatorId on user when role is evaluator)
+      const evaluatorObjectId = req.user?.evaluatorId || req.user?.id;
+      if (evaluation.evaluatorId.toString() !== String(evaluatorObjectId)) {
         return res.status(403).json({
           success: false,
           message: 'Not authorized to update this evaluation'
@@ -78,13 +95,22 @@ exports.getEvaluatorAssignments = async (req, res) => {
         });
       }
       
+      // If evaluation is draft and submission is past due, bump to pending unless explicitly submitting
+      let newStatus = status || 'draft';
+      if (!status) {
+        const submission = await Submission.findById(evaluation.submissionId);
+        if (submission?.evaluationDueDate && new Date(submission.evaluationDueDate) < new Date() && evaluation.status === 'draft') {
+          newStatus = 'pending';
+        }
+      }
+
       // Update evaluation
       evaluation = await Evaluation.findByIdAndUpdate(
         req.params.id,
         {
           scores,
           feedback,
-          status: status || 'draft'
+          status: newStatus
         },
         { new: true, runValidators: true }
       );
@@ -150,7 +176,8 @@ exports.getEvaluatorAssignments = async (req, res) => {
       }
       
       // Check if user is authorized to publish
-      if (req.user.role !== 'admin' && evaluation.evaluatorId.toString() !== req.user.id) {
+      const evaluatorObjectId = req.user?.evaluatorId || req.user?.id;
+      if (req.user.role !== 'admin' && evaluation.evaluatorId.toString() !== String(evaluatorObjectId)) {
         return res.status(403).json({
           success: false,
           message: 'Not authorized to publish this evaluation'
@@ -198,11 +225,45 @@ exports.getEvaluatorAssignments = async (req, res) => {
           }
         }
       })        .populate('evaluatorId');
+      
+      // Ensure scores are properly formatted with defaults
+      const formattedEvaluations = evaluations.map(evaluation => {
+        const evaluationObj = evaluation.toObject()
+        
+        // Ensure scores object exists and has all required fields
+        if (!evaluationObj.scores || typeof evaluationObj.scores !== 'object') {
+          evaluationObj.scores = {
+            relevance: 0,
+            innovation: 0,
+            clarity: 0,
+            depth: 0,
+            engagement: 0,
+            techUse: 0,
+            scalability: 0,
+            ethics: 0,
+            practicality: 0,
+            videoQuality: 0
+          }
+        }
+        
+        // Ensure each score field is a number
+        Object.keys(evaluationObj.scores).forEach(key => {
+          if (typeof evaluationObj.scores[key] !== 'number' || isNaN(evaluationObj.scores[key])) {
+            evaluationObj.scores[key] = 0
+          }
+        })
+        
+        // Ensure totalScore and averageScore are numbers
+        evaluationObj.totalScore = typeof evaluationObj.totalScore === 'number' && !isNaN(evaluationObj.totalScore) ? evaluationObj.totalScore : 0
+        evaluationObj.averageScore = typeof evaluationObj.averageScore === 'number' && !isNaN(evaluationObj.averageScore) ? evaluationObj.averageScore : 0
+        
+        return evaluationObj
+      })
   
       res.status(200).json({
         success: true,
-        count: evaluations.length,
-        data: evaluations
+        count: formattedEvaluations.length,
+        data: formattedEvaluations
       });
     } catch (error) {
       res.status(500).json({
@@ -564,32 +625,99 @@ exports.getEvaluationDetails = async (req, res) => {
 
 exports.exportEvaluationReport = async (req, res) => {
   try {
-    // const { user, error } = await verifyAdminAuth(req);
-    if (error) return res.status(401).json(errorResponse(error));
-
     const evaluations = await Evaluation.find()
-      .populate("evaluator", "name email")
-      .populate("submission", "teamName projectTitle");
+      .populate({ path: "evaluatorId", select: "name email" })
+      .populate({
+        path: "submissionId",
+        select: "projectTitle teamId",
+        populate: { path: "teamId", select: "name" },
+      })
+      .lean();
 
-    const csvRows = [
-      ["Evaluator", "Email", "Team", "Project", "Average Score", "Comments"],
-      ...evaluations.map((e) => [
-        e.evaluator?.name || "N/A",
-        e.evaluator?.email || "N/A",
-        e.submission?.teamName || "N/A",
-        e.submission?.projectTitle || "N/A",
-        e.averageScore,
-        (e.comments || "").replace(/[\n\r]/g, " "),
-      ]),
+    const csvHeader = [
+      "Evaluator",
+      "Email",
+      "Team",
+      "Project",
+      "AverageScore",
+      "TotalScore",
+      "Status",
+      "Feedback",
     ];
 
-    const csv = csvRows.map((row) => row.join(",")).join("\n");
+    const escapeCsv = (value) => {
+      if (value === null || value === undefined) return "";
+      const str = String(value).replace(/[\n\r]/g, " ");
+      return /[",]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+    };
 
-    res.setHeader("Content-disposition", "attachment; filename=evaluation-report.csv");
-    res.set("Content-Type", "text/csv");
-    res.status(200).send(csv);
-  } catch (err) {
-    console.error("Export Report Error:", err);
-    return res.status(500).json(errorResponse("Failed to export evaluation report"));
+    const csvRows = [
+      csvHeader.join(","),
+      ...evaluations.map((e) =>
+        [
+          escapeCsv(e.evaluatorId?.name || "N/A"),
+          escapeCsv(e.evaluatorId?.email || "N/A"),
+          escapeCsv(e.submissionId?.teamId?.name || "N/A"),
+          escapeCsv(e.submissionId?.projectTitle || "N/A"),
+          escapeCsv(e.averageScore ?? ""),
+          escapeCsv(e.totalScore ?? ""),
+          escapeCsv(e.status || ""),
+          escapeCsv(e.feedback || ""),
+        ].join(",")
+      ),
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=EvaluationReport.csv");
+    return res.status(200).send(csvRows);
+  } catch (error) {
+    console.error("Export Evaluation Report Error:", error);
+    return res.status(500).json({ success: false, message: "Failed to export evaluation report" });
+  }
+};
+
+/**
+ * @desc    Get evaluations for a specific team
+ * @route   GET /api/evaluations/team/:teamId
+ * @access  Private (Team)
+ */
+exports.getTeamEvaluations = async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    
+    // Verify the user belongs to this team
+    if (req.user.teamId?.toString() !== teamId) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to view evaluations for this team"
+      });
+    }
+
+    // Find all evaluations for submissions from this team
+    const evaluations = await Evaluation.find()
+      .populate({
+        path: 'submissionId',
+        select: 'projectTitle teamId videoLink status evaluationDueDate',
+        match: { teamId: teamId }
+      })
+      .populate({
+        path: 'evaluatorId',
+        select: 'name email'
+      })
+      .sort({ updatedAt: -1 });
+
+    // Filter out evaluations where submissionId is null (in case of deleted submissions)
+    const validEvaluations = evaluations.filter(eval => eval.submissionId);
+
+    res.status(200).json({
+      success: true,
+      data: validEvaluations
+    });
+  } catch (error) {
+    console.error('getTeamEvaluations error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch team evaluations'
+    });
   }
 };

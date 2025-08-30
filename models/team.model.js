@@ -67,9 +67,35 @@ const TeamSchema = new mongoose.Schema(
   },
 )
 
-// Virtual for member count
+// Virtual for member count (defensive against undefined members)
 TeamSchema.virtual("memberCount").get(function () {
-  return this.members.length + 1 // +1 for the leader
+  const membersCount = Array.isArray(this.members) ? this.members.length : 0
+  return membersCount + 1 // +1 for the leader
 })
+
+// Pre-save middleware to validate team size
+TeamSchema.pre("save", function (next) {
+  const totalMembers = this.memberCount
+  
+  if (totalMembers > 5) {
+    return next(new Error("Team cannot have more than 5 members (including leader)"))
+  }
+  
+  if (totalMembers < 1) {
+    return next(new Error("Team must have at least 1 member (leader)"))
+  }
+  
+  next()
+})
+
+// Method to check if team can accept more members
+TeamSchema.methods.canAcceptMember = function() {
+  return this.memberCount < 5
+}
+
+// Method to get available member slots
+TeamSchema.methods.getAvailableSlots = function() {
+  return Math.max(0, 5 - this.memberCount)
+}
 
 module.exports = mongoose.model("Team", TeamSchema)

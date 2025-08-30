@@ -3,6 +3,7 @@ const User = require("../models/user.model");
 const Evaluator=require("../models/evaluator.model")
 const Submission = require("../models/submission.model");
 const Evaluation = require("../models/evaluation.model");
+const Team = require("../models/team.model");
 /**
  * @desc    Create a new submission
  * @route   POST /api/submissions
@@ -31,6 +32,10 @@ exports.createSubmission = async (req, res) => {
       }
       
       // Create submission
+      // Default due date: 7 days after submission
+      const defaultDueDays = 7;
+      const evaluationDueDate = new Date(Date.now() + defaultDueDays * 24 * 60 * 60 * 1000);
+
       const submission = await Submission.create({
         teamId: req.user.teamId,
         projectTitle,
@@ -38,14 +43,41 @@ exports.createSubmission = async (req, res) => {
         learningOutcomes,
         videoLink,
         teamMembers,
-        submittedBy: req.user.id
+        submittedBy: req.user.id,
+        evaluationDueDate,
       });
       
       // Update team with submission
       await Team.findByIdAndUpdate(req.user.teamId, {
         $push: { submissions: submission._id }
       });
-      
+
+      // Auto-assign up to 3 approved evaluators randomly
+      const evaluators = await Evaluator.find({ approved: true }).limit(50);
+      const shuffled = [...evaluators].sort(() => 0.5 - Math.random());
+      const toAssign = shuffled.slice(0, Math.min(3, shuffled.length));
+      for (const ev of toAssign) {
+        const evaluation = await Evaluation.create({
+          submissionId: submission._id,
+          evaluatorId: ev._id,
+          status: submission.evaluationDueDate && new Date(submission.evaluationDueDate) < new Date() ? 'pending' : 'draft',
+          scores: {
+            relevance: 0,
+            innovation: 0,
+            clarity: 0,
+            depth: 0,
+            engagement: 0,
+            techUse: 0,
+            scalability: 0,
+            ethics: 0,
+            practicality: 0,
+            videoQuality: 0
+          },
+        });
+        submission.evaluations.push(evaluation._id);
+      }
+      await submission.save();
+
       res.status(201).json({
         success: true,
         data: submission
@@ -139,45 +171,41 @@ exports.createSubmission = async (req, res) => {
         });
       }
       console.log(req.params)
-      // Find evaluator
-      const evaluator = await Evaluator.findById(req.params?.evaluatorId);
-      
-      if (!evaluator ) {
-        return res.status(404).json({
-          success: false,
-          message: 'Evaluator not found'
-        });
+      // Find evaluator (accepts Evaluator._id or User._id that maps to evaluatorId)
+      let evaluator = await Evaluator.findById(req.params?.evaluatorId);
+      if (!evaluator) {
+        const maybeUser = await User.findById(req.params?.evaluatorId).select('evaluatorId');
+        if (maybeUser?.evaluatorId) {
+          evaluator = await Evaluator.findById(maybeUser.evaluatorId);
+        }
+      }
+      if (!evaluator) {
+        return res.status(404).json({ success: false, message: 'Evaluator not found' });
       }
       
       // Check if evaluator is already assigned
-      const existingEvaluation = await Evaluation.findOne({
-        submissionId: submission._id,
-        evaluatorId: evaluator._id
-      });
+      const existingEvaluation = await Evaluation.findOne({ submissionId: submission._id, evaluatorId: evaluator._id });
       
       if (existingEvaluation) {
-        return res.status(400).json({
-          success: false,
-          message: 'Evaluator is already assigned to this submission'
-        });
+        return res.status(400).json({ success: false, message: 'Evaluator is already assigned to this submission' });
       }
       
       // Create evaluation assignment
       const evaluation = await Evaluation.create({
         submissionId: submission._id,
         evaluatorId: evaluator._id,
-        status: 'draft',
+        status: submission.evaluationDueDate && new Date(submission.evaluationDueDate) < new Date() ? 'pending' : 'draft',
         scores: {
-          relevance: 5,
-          innovation: 5,
-          clarity: 5,
-          depth: 5,
-          engagement: 5,
-          techUse: 5,
-          scalability: 5,
-          ethics: 5,
-          practicality: 5,
-          videoQuality: 5
+          relevance: 0,
+          innovation: 0,
+          clarity: 0,
+          depth: 0,
+          engagement: 0,
+          techUse: 0,
+          scalability: 0,
+          ethics: 0,
+          practicality: 0,
+          videoQuality: 0
         },
         // feedback: ''
       });

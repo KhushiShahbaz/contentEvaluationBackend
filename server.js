@@ -4,6 +4,7 @@ const cors = require("cors")
 const dotenv = require("dotenv")
 const cookieParser = require("cookie-parser")
 const path = require("path")
+const fs = require("fs")
 
 // Import routes
 const authRoutes = require("./routes/auth.routes")
@@ -13,6 +14,8 @@ const evaluatorRoutes = require("./routes/evaluator.routes")
 const adminRoutes = require("./routes/admin.routes")
 const submissionRoutes = require("./routes/submission.routes")
 const evaluationRoutes = require("./routes/evaluation.routes")
+const chatRoutes = require("./routes/chat.routes")
+const publicRoutes = require("./routes/public.routes")
 
 // Load environment variables
 dotenv.config()
@@ -46,14 +49,21 @@ app.use("/api/evaluators", evaluatorRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/submissions", submissionRoutes)
 app.use("/api/evaluations", evaluationRoutes)
+app.use("/api/chat", chatRoutes)
+app.use("/api", publicRoutes)
 
-// Serve static assets in production
+// Serve static assets in production only if build exists (for CRA setups)
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../client/build")))
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.resolve(__dirname, "../client/build", "index.html"))
-  })
+  const buildDir = path.join(__dirname, "../client/build")
+  const indexHtml = path.join(buildDir, "index.html")
+  if (fs.existsSync(indexHtml)) {
+    app.use(express.static(buildDir))
+    app.get("*", (req, res) => {
+      res.sendFile(indexHtml)
+    })
+  } else {
+    console.warn("Skipping static serve: client/build not found. Frontend should be served by Next.js or a reverse proxy.")
+  }
 }
 
 // Error handling middleware
